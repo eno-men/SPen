@@ -16,15 +16,12 @@
         --accent-blue: #60a5fa;
     }
 
-    /* Tarayıcı eylemleri tamamen kilitlendi - Adres çubuğu oynaması engellendi */
     html, body {
         margin: 0;
         padding: 0;
         width: 100vw;
         height: 100vh;
-        position: fixed; /* Kilit noktası: Sayfanın kaymasını ve adres çubuğunun gizlenmesini tamamen önler */
-        top: 0;
-        left: 0;
+        height: 100dvh;
         background: var(--bg-color);
         color: var(--text-main);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -33,12 +30,11 @@
         overscroll-behavior: none; 
     }
 
+    /* CSS ile %100 genişlik/yükseklik kısıtlaması kaldırıldı. Tuval orijinal çözünürlüğünde kalacak */
     #cizimAlani {
-        position: fixed; /* Absolute yerine fixed kullanıldı */
+        position: fixed;
         top: 0;
         left: 0;
-        width: 100%;
-        height: 100%;
         z-index: 1;
         touch-action: none;
     }
@@ -272,42 +268,27 @@
     const durumEl = document.getElementById("durum");
     const imlec = document.getElementById("imlec");
     const canvas = document.getElementById("cizimAlani");
-    const ctx = canvas.getContext("2d"); // Chrome mobilde sorun yaratabilen desynchronized özelliği stabilite için kaldırıldı.
+    const ctx = canvas.getContext("2d"); 
 
     let ciziliyorMu = false;
     let sonX = 0;
     let sonY = 0;
     let zamanDamgalari = [];
     let hoverZamanAsimi; 
-    let cizimBekliyor = false; // Çizerken ekran dönerse bekletmek için
 
-    function boyutlandir() {
-        const geciciCanvas = document.createElement('canvas');
-        geciciCanvas.width = canvas.width;
-        geciciCanvas.height = canvas.height;
-        const geciciCtx = geciciCanvas.getContext('2d');
+    // YENİ STRATEJİ: DEVASA SABİT TUVAL
+    // Ekran küçülüp büyüse de tuvali etkilemeyecek statik dev bir zemin oluşturuyoruz.
+    function tuvaliSabitle() {
+        const ekranG = window.screen.width || window.innerWidth;
+        const ekranY = window.screen.height || window.innerHeight;
+        // Telefonu yan çevirme ihtimaline karşı en büyük kenarın 2 katı büyüklüğünde bir kare tuval:
+        const devasaBoyut = Math.max(ekranG, ekranY) * 2;
         
-        if (canvas.width > 0 && canvas.height > 0) {
-            geciciCtx.drawImage(canvas, 0, 0);
-        }
-
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-
-        if (geciciCanvas.width > 0 && geciciCanvas.height > 0) {
-            ctx.drawImage(geciciCanvas, 0, 0);
-        }
+        canvas.width = devasaBoyut;
+        canvas.height = devasaBoyut;
     }
     
-    // Çizim yapılırken ekran silinmesini ertele
-    window.addEventListener('resize', () => {
-        if (ciziliyorMu) {
-            cizimBekliyor = true;
-            return;
-        }
-        boyutlandir();
-    });
-    boyutlandir();
+    tuvaliSabitle(); // Sadece ilk açılışta bir kez çalışır. Hatalara sebep olan 'resize' event dinleyicisi tamamen silindi.
 
     function temizle() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -345,15 +326,6 @@
 
     function rad2deg(rad) {
         return (rad * 180 / Math.PI).toFixed(1);
-    }
-
-    // Kesin koordinat hesaplama fonksiyonu
-    function koordinatAl(e) {
-        const rect = canvas.getBoundingClientRect();
-        return {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-        };
     }
 
     function guncelle(e, olayTipi, panelUzerinde) {
@@ -419,18 +391,16 @@
             hoverEl.textContent = ""; 
         }
 
-        // Çizim Mantığı - Hatalı koordinat önleme sistemi
-        const { x: guncelX, y: guncelY } = koordinatAl(e);
-
+        // Çizim Mantığı (Tuval CSS ile ezilmediği için direkt e.clientX/Y kullanılabilir)
         if (olayTipi === "pointerdown" && !panelUzerinde) {
             ciziliyorMu = true;
-            sonX = guncelX;
-            sonY = guncelY;
+            sonX = e.clientX;
+            sonY = e.clientY;
             try { canvas.setPointerCapture(e.pointerId); } catch(err) {} 
         } else if (olayTipi === "pointermove" && ciziliyorMu) {
             ctx.beginPath();
             ctx.moveTo(sonX, sonY);
-            ctx.lineTo(guncelX, guncelY);
+            ctx.lineTo(e.clientX, e.clientY);
             
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
@@ -441,17 +411,11 @@
             else ctx.strokeStyle = '#ffffff';
 
             ctx.stroke();
-            sonX = guncelX;
-            sonY = guncelY;
+            sonX = e.clientX;
+            sonY = e.clientY;
         } else if (["pointerup", "pointercancel", "pointerout", "pointerleave"].includes(olayTipi)) {
             ciziliyorMu = false;
             try { canvas.releasePointerCapture(e.pointerId); } catch(err) {}
-            
-            // Eğer çizerken ekran boyutu değişmişse, şimdi güvenle yeniden boyutlandırabiliriz
-            if (cizimBekliyor) {
-                boyutlandir();
-                cizimBekliyor = false;
-            }
         }
     }
 
