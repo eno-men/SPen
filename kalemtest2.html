@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>S Pen ve İşaretçi Tanılama Aracı</title>
+<link rel="icon" href="https://i.hizliresim.com/eqbsaii.png" type="image/png">
+
+<style>
+    :root {
+        --bg-color: #0f0f0f;
+        --text-main: #ffffff;
+        --text-muted: #a3a3a3;
+        --accent-green: #4ade80;
+        --accent-red: #ef4444;
+        --accent-blue: #60a5fa;
+    }
+
+    /* Tarayıcı eylemleri tamamen kilitlendi - Adres çubuğu oynaması engellendi */
+    html, body {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        position: fixed; /* Kilit noktası: Sayfanın kaymasını ve adres çubuğunun gizlenmesini tamamen önler */
+        top: 0;
+        left: 0;
+        background: var(--bg-color);
+        color: var(--text-main);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        overflow: hidden;
+        touch-action: none;
+        overscroll-behavior: none; 
+    }
+
+    #cizimAlani {
+        position: fixed; /* Absolute yerine fixed kullanıldı */
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+        touch-action: none;
+    }
+
+    #panel {
+        position: fixed;
+        top: clamp(10px, 2vh, 15px);
+        left: clamp(10px, 2vw, 15px);
+        width: clamp(280px, 92vw, 360px);
+        max-height: calc(100vh - 30px);
+        overflow: hidden;
+        padding: clamp(10px, 2vh, 20px);
+        z-index: 10;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+    }
+
+    #panel > * {
+        pointer-events: auto;
+    }
+
+    .header-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: clamp(5px, 1vh, 10px);
+        margin-bottom: clamp(10px, 2vh, 15px);
+    }
+
+    .header-container h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+    }
+
+    .header-link {
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 11px;
+        font-weight: 500;
+        background: rgba(0,0,0,0.3);
+        padding: 5px 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.05);
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+
+    .header-link:hover {
+        color: var(--text-main);
+        background: rgba(0,0,0,0.6);
+        border-color: rgba(255,255,255,0.2);
+    }
+
+    .grid-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: clamp(4px, 1vh, 10px);
+        flex-grow: 1;
+    }
+
+    .veri-kutusu {
+        padding: clamp(2px, 0.5vh, 5px) 0;
+    }
+
+    .etiket {
+        font-size: 12px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+        display: block;
+    }
+
+    .deger {
+        color: var(--accent-green);
+        font-weight: 600;
+        font-size: 16px;
+        font-family: monospace;
+    }
+
+    .genis-kutu {
+        grid-column: span 2;
+    }
+
+    #durum {
+        margin-top: clamp(10px, 2vh, 15px);
+        font-size: clamp(14px, 2.5vh, 18px);
+        font-weight: bold;
+        text-align: center;
+        padding: clamp(8px, 1.5vh, 12px) 0;
+        transition: all 0.2s;
+    }
+
+    .basili { color: var(--accent-green); }
+    .basiliDegil { color: var(--accent-red); }
+
+    #hover {
+        color: var(--accent-blue);
+        font-size: clamp(12px, 2vh, 16px);
+        text-align: center;
+        margin-top: clamp(5px, 1vh, 10px);
+        font-weight: 500;
+    }
+
+    #imlec {
+        position: fixed;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 2px solid rgba(255,255,255,0.5);
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        z-index: 100;
+        transition: width 0.1s, height 0.1s, background-color 0.1s;
+        display: none;
+    }
+
+    .butonlar {
+        display: flex;
+        gap: 10px;
+        margin-top: clamp(10px, 2vh, 15px);
+    }
+
+    button {
+        flex: 1;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 11px;
+        font-weight: 500;
+        font-family: inherit;
+        background: rgba(0,0,0,0.3);
+        padding: 5px 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.05);
+        transition: all 0.2s ease;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+
+    button:hover {
+        color: var(--text-main);
+        background: rgba(0,0,0,0.6);
+        border-color: rgba(255,255,255,0.2);
+    }
+
+    @media (max-width: 600px) {
+        #panel {
+            top: 10px; left: 10px; right: 10px;
+            width: auto;
+        }
+    }
+</style>
+</head>
+
+<body>
+
+<canvas id="cizimAlani"></canvas>
+<div id="imlec"></div>
+
+<div id="panel">
+    <div class="header-container">
+        <h1>Tanılama Verileri</h1>
+        <a href="https://many.bio/enomen" target="_blank" class="header-link">enomen tarafından yapılmıştır</a>
+    </div>
+
+    <div class="grid-container">
+        <div class="veri-kutusu genis-kutu">
+            <span class="etiket">Aygıt Tipi / Yenileme (Hz)</span>
+            <span class="deger" id="tur">-</span> | <span class="deger" id="hz" style="color: #facc15;">0 Hz</span>
+        </div>
+        <div class="veri-kutusu genis-kutu">
+            <span class="etiket">Olay (Event)</span>
+            <span class="deger" id="eventType">-</span>
+        </div>
+        <div class="veri-kutusu">
+            <span class="etiket">Koordinat X</span>
+            <span class="deger" id="x">0</span>
+        </div>
+        <div class="veri-kutusu">
+            <span class="etiket">Koordinat Y</span>
+            <span class="deger" id="y">0</span>
+        </div>
+        <div class="veri-kutusu genis-kutu">
+            <span class="etiket">Basınç (Pressure)</span>
+            <span class="deger" id="pressure">0.000</span>
+        </div>
+        <div class="veri-kutusu">
+            <span class="etiket">Eğim X (Tilt X)</span>
+            <span class="deger" id="tiltX">0</span>°
+        </div>
+        <div class="veri-kutusu">
+            <span class="etiket">Eğim Y (Tilt Y)</span>
+            <span class="deger" id="tiltY">0</span>°
+        </div>
+        <div class="veri-kutusu">
+            <span class="etiket">Yön (Azimuth)</span>
+            <span class="deger" id="azimuth">0</span>°
+        </div>
+        <div class="veri-kutusu">
+            <span class="etiket">İrtifa (Altitude)</span>
+            <span class="deger" id="altitude">0</span>°
+        </div>
+    </div>
+
+    <div id="durum" class="basiliDegil">Hazır Bekleniyor</div>
+    <div id="hover"></div>
+
+    <div class="butonlar">
+        <button onclick="temizle()">Çizimi Temizle</button>
+        <button onclick="tamEkran()">Tam Ekran</button>
+    </div>
+</div>
+
+<script>
+    const els = {
+        tur: document.getElementById("tur"),
+        hz: document.getElementById("hz"),
+        eventType: document.getElementById("eventType"),
+        x: document.getElementById("x"),
+        y: document.getElementById("y"),
+        pressure: document.getElementById("pressure"),
+        tiltX: document.getElementById("tiltX"),
+        tiltY: document.getElementById("tiltY"),
+        azimuth: document.getElementById("azimuth"),
+        altitude: document.getElementById("altitude")
+    };
+
+    const hoverEl = document.getElementById("hover");
+    const durumEl = document.getElementById("durum");
+    const imlec = document.getElementById("imlec");
+    const canvas = document.getElementById("cizimAlani");
+    const ctx = canvas.getContext("2d"); // Chrome mobilde sorun yaratabilen desynchronized özelliği stabilite için kaldırıldı.
+
+    let ciziliyorMu = false;
+    let sonX = 0;
+    let sonY = 0;
+    let zamanDamgalari = [];
+    let hoverZamanAsimi; 
+    let cizimBekliyor = false; // Çizerken ekran dönerse bekletmek için
+
+    function boyutlandir() {
+        const geciciCanvas = document.createElement('canvas');
+        geciciCanvas.width = canvas.width;
+        geciciCanvas.height = canvas.height;
+        const geciciCtx = geciciCanvas.getContext('2d');
+        
+        if (canvas.width > 0 && canvas.height > 0) {
+            geciciCtx.drawImage(canvas, 0, 0);
+        }
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        if (geciciCanvas.width > 0 && geciciCanvas.height > 0) {
+            ctx.drawImage(geciciCanvas, 0, 0);
+        }
+    }
+    
+    // Çizim yapılırken ekran silinmesini ertele
+    window.addEventListener('resize', () => {
+        if (ciziliyorMu) {
+            cizimBekliyor = true;
+            return;
+        }
+        boyutlandir();
+    });
+    boyutlandir();
+
+    function temizle() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function tamEkran() {
+        const doc = window.document;
+        const docEl = doc.documentElement;
+
+        const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+        const cancelFullScreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
+
+        if(!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
+            if (requestFullScreen) requestFullScreen.call(docEl).catch(err => console.log(err));
+        } else {
+            if (cancelFullScreen) cancelFullScreen.call(doc);
+        }
+    }
+
+    function aygitAdi(pointerType) {
+        switch(pointerType) {
+            case "mouse": return "Mouse";
+            case "touch": return "Dokunmatik";
+            case "pen": return "Kalem / S Pen";
+            default: return pointerType || "Bilinmiyor";
+        }
+    }
+
+    function hzHesapla() {
+        const suAn = performance.now();
+        zamanDamgalari.push(suAn);
+        zamanDamgalari = zamanDamgalari.filter(t => suAn - t <= 1000);
+        els.hz.textContent = `${zamanDamgalari.length} Hz`;
+    }
+
+    function rad2deg(rad) {
+        return (rad * 180 / Math.PI).toFixed(1);
+    }
+
+    // Kesin koordinat hesaplama fonksiyonu
+    function koordinatAl(e) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
+    }
+
+    function guncelle(e, olayTipi, panelUzerinde) {
+        if(olayTipi === "pointermove" || olayTipi === "pointerrawupdate") {
+            hzHesapla();
+        }
+
+        if (["pointerout", "pointerleave", "pointercancel"].includes(olayTipi)) {
+            imlec.style.display = "none";
+        } else {
+            imlec.style.display = "block";
+            imlec.style.left = e.clientX + "px";
+            imlec.style.top = e.clientY + "px";
+        }
+        
+        let gorselBasinc = e.pressure > 0 ? e.pressure : 0.1;
+        imlec.style.width = `${20 * gorselBasinc}px`;
+        imlec.style.height = `${20 * gorselBasinc}px`;
+        
+        if (e.pointerType === "pen" && e.pressure > 0) {
+            imlec.style.backgroundColor = "rgba(74, 222, 128, 0.5)";
+            imlec.style.borderColor = "transparent";
+        } else {
+            imlec.style.backgroundColor = "transparent";
+            imlec.style.borderColor = "rgba(255,255,255,0.5)";
+        }
+
+        els.tur.textContent = aygitAdi(e.pointerType);
+        els.eventType.textContent = olayTipi;
+        els.x.textContent = Math.round(e.clientX);
+        els.y.textContent = Math.round(e.clientY);
+        els.pressure.textContent = e.pressure.toFixed(3);
+        els.tiltX.textContent = Math.round(e.tiltX || 0);
+        els.tiltY.textContent = Math.round(e.tiltY || 0);
+        
+        els.azimuth.textContent = e.azimuthAngle !== undefined ? rad2deg(e.azimuthAngle) : "D/Y";
+        els.altitude.textContent = e.altitudeAngle !== undefined ? rad2deg(e.altitudeAngle) : "D/Y";
+
+        let basili = (e.buttons > 0);
+
+        if(basili) {
+            durumEl.textContent = e.pointerType === "pen" && e.buttons === 2 
+                ? "S Pen Tuşuna + Ekrana Basıldı" 
+                : "Ekrana Temas Ediliyor";
+            durumEl.className = "basili";
+        } else {
+            durumEl.textContent = "Temas Yok";
+            durumEl.className = "basiliDegil";
+        }
+
+        clearTimeout(hoverZamanAsimi);
+
+        if (e.pointerType === "pen" && e.pressure === 0 && !["pointerout", "pointercancel", "pointerleave"].includes(olayTipi)) {
+            hoverEl.textContent = e.buttons === 2 
+                ? "S Pen Havada + Tuşa Basılı" 
+                : "S Pen Havada Algılandı";
+            hoverEl.style.color = e.buttons === 2 ? "var(--accent-red)" : "var(--accent-blue)";
+            
+            hoverZamanAsimi = setTimeout(() => {
+                hoverEl.textContent = "";
+            }, 500);
+        } else {
+            hoverEl.textContent = ""; 
+        }
+
+        // Çizim Mantığı - Hatalı koordinat önleme sistemi
+        const { x: guncelX, y: guncelY } = koordinatAl(e);
+
+        if (olayTipi === "pointerdown" && !panelUzerinde) {
+            ciziliyorMu = true;
+            sonX = guncelX;
+            sonY = guncelY;
+            try { canvas.setPointerCapture(e.pointerId); } catch(err) {} 
+        } else if (olayTipi === "pointermove" && ciziliyorMu) {
+            ctx.beginPath();
+            ctx.moveTo(sonX, sonY);
+            ctx.lineTo(guncelX, guncelY);
+            
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = e.pointerType === "pen" ? Math.max(1, e.pressure * 10) : 2;
+            
+            if (e.pointerType === "pen") ctx.strokeStyle = '#4ade80';
+            else if (e.pointerType === "touch") ctx.strokeStyle = '#60a5fa';
+            else ctx.strokeStyle = '#ffffff';
+
+            ctx.stroke();
+            sonX = guncelX;
+            sonY = guncelY;
+        } else if (["pointerup", "pointercancel", "pointerout", "pointerleave"].includes(olayTipi)) {
+            ciziliyorMu = false;
+            try { canvas.releasePointerCapture(e.pointerId); } catch(err) {}
+            
+            // Eğer çizerken ekran boyutu değişmişse, şimdi güvenle yeniden boyutlandırabiliriz
+            if (cizimBekliyor) {
+                boyutlandir();
+                cizimBekliyor = false;
+            }
+        }
+    }
+
+    const olaylar = [
+        "pointermove", "pointerdown", "pointerup", 
+        "pointercancel", "pointerout", "pointerleave", "pointerrawupdate"
+    ];
+
+    olaylar.forEach(tip => {
+        window.addEventListener(tip, e => {
+            const isElement = e.target instanceof Element;
+            const panelUzerinde = isElement && !!e.target.closest('#panel');
+            
+            if (!panelUzerinde && e.cancelable) {
+                e.preventDefault(); 
+            }
+
+            guncelle(e, tip, panelUzerinde);
+        }, { passive: false });
+    });
+
+</script>
+</body>
+</html>
