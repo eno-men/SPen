@@ -30,7 +30,6 @@
         overscroll-behavior: none; 
     }
 
-    /* CSS ile %100 genişlik/yükseklik kısıtlaması kaldırıldı. Tuval orijinal çözünürlüğünde kalacak */
     #cizimAlani {
         position: fixed;
         top: 0;
@@ -84,12 +83,6 @@
         white-space: nowrap;
     }
 
-    .header-link:hover {
-        color: var(--text-main);
-        background: rgba(0,0,0,0.6);
-        border-color: rgba(255,255,255,0.2);
-    }
-
     .grid-container {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -127,7 +120,7 @@
         font-weight: bold;
         text-align: center;
         padding: clamp(8px, 1.5vh, 12px) 0;
-        transition: all 0.2s;
+        transition: color 0.2s;
     }
 
     .basili { color: var(--accent-green); }
@@ -139,19 +132,20 @@
         text-align: center;
         margin-top: clamp(5px, 1vh, 10px);
         font-weight: 500;
+        min-height: 20px;
     }
 
     #imlec {
         position: fixed;
-        width: 20px;
-        height: 20px;
+        top: 0;
+        left: 0;
         border-radius: 50%;
         border: 2px solid rgba(255,255,255,0.5);
         pointer-events: none;
-        transform: translate(-50%, -50%);
         z-index: 100;
-        transition: width 0.1s, height 0.1s, background-color 0.1s;
         display: none;
+        will-change: transform, width, height;
+        transform-origin: center center;
     }
 
     .butonlar {
@@ -163,23 +157,13 @@
     button {
         flex: 1;
         color: var(--text-muted);
-        text-decoration: none;
         font-size: 11px;
         font-weight: 500;
-        font-family: inherit;
         background: rgba(0,0,0,0.3);
         padding: 5px 10px;
         border-radius: 12px;
         border: 1px solid rgba(255,255,255,0.05);
-        transition: all 0.2s ease;
-        white-space: nowrap;
         cursor: pointer;
-    }
-
-    button:hover {
-        color: var(--text-main);
-        background: rgba(0,0,0,0.6);
-        border-color: rgba(255,255,255,0.2);
     }
 
     @media (max-width: 600px) {
@@ -261,34 +245,42 @@
         tiltX: document.getElementById("tiltX"),
         tiltY: document.getElementById("tiltY"),
         azimuth: document.getElementById("azimuth"),
-        altitude: document.getElementById("altitude")
+        altitude: document.getElementById("altitude"),
+        durum: document.getElementById("durum"),
+        hover: document.getElementById("hover")
     };
 
-    const hoverEl = document.getElementById("hover");
-    const durumEl = document.getElementById("durum");
     const imlec = document.getElementById("imlec");
     const canvas = document.getElementById("cizimAlani");
-    const ctx = canvas.getContext("2d"); 
+    
+    // Gecikmeyi önleyen anahtar parametre: desynchronized
+    const ctx = canvas.getContext("2d", { desynchronized: true }); 
 
     let ciziliyorMu = false;
     let sonX = 0;
     let sonY = 0;
-    let zamanDamgalari = [];
-    let hoverZamanAsimi; 
+    
+    // Hz hesaplaması için optimize edilmiş değişkenler
+    let eventSayaci = 0;
+    setInterval(() => {
+        els.hz.textContent = `${eventSayaci} Hz`;
+        eventSayaci = 0;
+    }, 1000);
 
-    // YENİ STRATEJİ: DEVASA SABİT TUVAL
-    // Ekran küçülüp büyüse de tuvali etkilemeyecek statik dev bir zemin oluşturuyoruz.
+    // DOM güncellemelerini tutmak için durum (state) objesi
+    let uiDurumu = null;
+    let uiGuncellemeBekliyor = false;
+
     function tuvaliSabitle() {
         const ekranG = window.screen.width || window.innerWidth;
         const ekranY = window.screen.height || window.innerHeight;
-        // Telefonu yan çevirme ihtimaline karşı en büyük kenarın 2 katı büyüklüğünde bir kare tuval:
         const devasaBoyut = Math.max(ekranG, ekranY) * 2;
         
         canvas.width = devasaBoyut;
         canvas.height = devasaBoyut;
     }
     
-    tuvaliSabitle(); // Sadece ilk açılışta bir kez çalışır. Hatalara sebep olan 'resize' event dinleyicisi tamamen silindi.
+    tuvaliSabitle();
 
     function temizle() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -297,61 +289,36 @@
     function tamEkran() {
         const doc = window.document;
         const docEl = doc.documentElement;
+        const requestFullScreen = docEl.requestFullscreen || docEl.webkitRequestFullScreen;
+        const cancelFullScreen = doc.exitFullscreen || doc.webkitExitFullscreen;
 
-        const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
-        const cancelFullScreen = doc.exitFullscreen || doc.mozCancelFullScreen || doc.webkitExitFullscreen || doc.msExitFullscreen;
-
-        if(!doc.fullscreenElement && !doc.mozFullScreenElement && !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
-            if (requestFullScreen) requestFullScreen.call(docEl).catch(err => console.log(err));
+        if(!doc.fullscreenElement && !doc.webkitFullscreenElement) {
+            if (requestFullScreen) requestFullScreen.call(docEl).catch(() => {});
         } else {
             if (cancelFullScreen) cancelFullScreen.call(doc);
         }
     }
 
     function aygitAdi(pointerType) {
-        switch(pointerType) {
-            case "mouse": return "Mouse";
-            case "touch": return "Dokunmatik";
-            case "pen": return "Kalem / S Pen";
-            default: return pointerType || "Bilinmiyor";
-        }
-    }
-
-    function hzHesapla() {
-        const suAn = performance.now();
-        zamanDamgalari.push(suAn);
-        zamanDamgalari = zamanDamgalari.filter(t => suAn - t <= 1000);
-        els.hz.textContent = `${zamanDamgalari.length} Hz`;
+        if(pointerType === "pen") return "Kalem / S Pen";
+        if(pointerType === "touch") return "Dokunmatik";
+        if(pointerType === "mouse") return "Mouse";
+        return pointerType || "Bilinmiyor";
     }
 
     function rad2deg(rad) {
         return (rad * 180 / Math.PI).toFixed(1);
     }
 
-    function guncelle(e, olayTipi, panelUzerinde) {
-        if(olayTipi === "pointermove" || olayTipi === "pointerrawupdate") {
-            hzHesapla();
+    // Arayüzü yormadan (60FPS ile) verileri ekrana yazdıran fonksiyon
+    function arayuzuGuncelle() {
+        if (!uiDurumu) {
+            uiGuncellemeBekliyor = false;
+            return;
         }
 
-        if (["pointerout", "pointerleave", "pointercancel"].includes(olayTipi)) {
-            imlec.style.display = "none";
-        } else {
-            imlec.style.display = "block";
-            imlec.style.left = e.clientX + "px";
-            imlec.style.top = e.clientY + "px";
-        }
-        
-        let gorselBasinc = e.pressure > 0 ? e.pressure : 0.1;
-        imlec.style.width = `${20 * gorselBasinc}px`;
-        imlec.style.height = `${20 * gorselBasinc}px`;
-        
-        if (e.pointerType === "pen" && e.pressure > 0) {
-            imlec.style.backgroundColor = "rgba(74, 222, 128, 0.5)";
-            imlec.style.borderColor = "transparent";
-        } else {
-            imlec.style.backgroundColor = "transparent";
-            imlec.style.borderColor = "rgba(255,255,255,0.5)";
-        }
+        const e = uiDurumu.event;
+        const olayTipi = uiDurumu.tip;
 
         els.tur.textContent = aygitAdi(e.pointerType);
         els.eventType.textContent = olayTipi;
@@ -360,63 +327,50 @@
         els.pressure.textContent = e.pressure.toFixed(3);
         els.tiltX.textContent = Math.round(e.tiltX || 0);
         els.tiltY.textContent = Math.round(e.tiltY || 0);
-        
         els.azimuth.textContent = e.azimuthAngle !== undefined ? rad2deg(e.azimuthAngle) : "D/Y";
         els.altitude.textContent = e.altitudeAngle !== undefined ? rad2deg(e.altitudeAngle) : "D/Y";
 
-        let basili = (e.buttons > 0);
-
-        if(basili) {
-            durumEl.textContent = e.pointerType === "pen" && e.buttons === 2 
-                ? "S Pen Tuşuna + Ekrana Basıldı" 
-                : "Ekrana Temas Ediliyor";
-            durumEl.className = "basili";
+        if (["pointerout", "pointerleave", "pointercancel"].includes(olayTipi)) {
+            imlec.style.display = "none";
+            els.durum.textContent = "Temas Yok";
+            els.durum.className = "basiliDegil";
+            els.hover.textContent = "";
         } else {
-            durumEl.textContent = "Temas Yok";
-            durumEl.className = "basiliDegil";
+            imlec.style.display = "block";
+            
+            // GPU Hızlandırmalı İmleç Konumlandırması (Lag'ı çözen ana etkenlerden biri)
+            const gorselBasinc = e.pressure > 0 ? e.pressure : 0.1;
+            const boyut = 20 * gorselBasinc;
+            imlec.style.width = `${boyut}px`;
+            imlec.style.height = `${boyut}px`;
+            imlec.style.transform = `translate3d(${e.clientX - boyut/2}px, ${e.clientY - boyut/2}px, 0)`;
+            
+            if (e.pointerType === "pen" && e.pressure > 0) {
+                imlec.style.backgroundColor = "rgba(74, 222, 128, 0.5)";
+                imlec.style.borderColor = "transparent";
+            } else {
+                imlec.style.backgroundColor = "transparent";
+                imlec.style.borderColor = "rgba(255,255,255,0.5)";
+            }
+
+            if (e.buttons > 0) {
+                els.durum.textContent = e.pointerType === "pen" && e.buttons === 2 
+                    ? "S Pen Tuşuna + Ekrana Basıldı" 
+                    : "Ekrana Temas Ediliyor";
+                els.durum.className = "basili";
+                els.hover.textContent = "";
+            } else {
+                els.durum.textContent = "Temas Yok";
+                els.durum.className = "basiliDegil";
+                
+                if (e.pointerType === "pen") {
+                    els.hover.textContent = e.buttons === 2 ? "S Pen Havada + Tuşa Basılı" : "S Pen Havada Algılandı";
+                    els.hover.style.color = e.buttons === 2 ? "var(--accent-red)" : "var(--accent-blue)";
+                }
+            }
         }
 
-        clearTimeout(hoverZamanAsimi);
-
-        if (e.pointerType === "pen" && e.pressure === 0 && !["pointerout", "pointercancel", "pointerleave"].includes(olayTipi)) {
-            hoverEl.textContent = e.buttons === 2 
-                ? "S Pen Havada + Tuşa Basılı" 
-                : "S Pen Havada Algılandı";
-            hoverEl.style.color = e.buttons === 2 ? "var(--accent-red)" : "var(--accent-blue)";
-            
-            hoverZamanAsimi = setTimeout(() => {
-                hoverEl.textContent = "";
-            }, 500);
-        } else {
-            hoverEl.textContent = ""; 
-        }
-
-        // Çizim Mantığı (Tuval CSS ile ezilmediği için direkt e.clientX/Y kullanılabilir)
-        if (olayTipi === "pointerdown" && !panelUzerinde) {
-            ciziliyorMu = true;
-            sonX = e.clientX;
-            sonY = e.clientY;
-            try { canvas.setPointerCapture(e.pointerId); } catch(err) {} 
-        } else if (olayTipi === "pointermove" && ciziliyorMu) {
-            ctx.beginPath();
-            ctx.moveTo(sonX, sonY);
-            ctx.lineTo(e.clientX, e.clientY);
-            
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.lineWidth = e.pointerType === "pen" ? Math.max(1, e.pressure * 10) : 2;
-            
-            if (e.pointerType === "pen") ctx.strokeStyle = '#4ade80';
-            else if (e.pointerType === "touch") ctx.strokeStyle = '#60a5fa';
-            else ctx.strokeStyle = '#ffffff';
-
-            ctx.stroke();
-            sonX = e.clientX;
-            sonY = e.clientY;
-        } else if (["pointerup", "pointercancel", "pointerout", "pointerleave"].includes(olayTipi)) {
-            ciziliyorMu = false;
-            try { canvas.releasePointerCapture(e.pointerId); } catch(err) {}
-        }
+        uiGuncellemeBekliyor = false;
     }
 
     const olaylar = [
@@ -426,6 +380,11 @@
 
     olaylar.forEach(tip => {
         window.addEventListener(tip, e => {
+            // Frekans hesaplaması
+            if(tip === "pointermove" || tip === "pointerrawupdate") {
+                eventSayaci++;
+            }
+
             const isElement = e.target instanceof Element;
             const panelUzerinde = isElement && !!e.target.closest('#panel');
             
@@ -433,7 +392,56 @@
                 e.preventDefault(); 
             }
 
-            guncelle(e, tip, panelUzerinde);
+            // ÇİZİM İŞLEMİ (Eşzamanlı/Senkron - Gecikmesiz)
+            if (tip === "pointerdown" && !panelUzerinde) {
+                ciziliyorMu = true;
+                sonX = e.clientX;
+                sonY = e.clientY;
+                try { canvas.setPointerCapture(e.pointerId); } catch(err) {} 
+            } else if (tip === "pointermove" && ciziliyorMu) {
+                ctx.beginPath();
+                ctx.moveTo(sonX, sonY);
+                ctx.lineTo(e.clientX, e.clientY);
+                
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = e.pointerType === "pen" ? Math.max(1, e.pressure * 10) : 2;
+                
+                if (e.pointerType === "pen") ctx.strokeStyle = '#4ade80';
+                else if (e.pointerType === "touch") ctx.strokeStyle = '#60a5fa';
+                else ctx.strokeStyle = '#ffffff';
+
+                ctx.stroke();
+                sonX = e.clientX;
+                sonY = e.clientY;
+            } else if (["pointerup", "pointercancel", "pointerout", "pointerleave"].includes(tip)) {
+                ciziliyorMu = false;
+                try { canvas.releasePointerCapture(e.pointerId); } catch(err) {}
+            }
+
+            // DOM GÜNCELLEMESİ (Asenkron - İşlemciyi boğmamak için)
+            // Sadece gerekli verileri kopyalayarak state objesine alıyoruz
+            uiDurumu = {
+                tip: tip,
+                event: {
+                    pointerType: e.pointerType,
+                    clientX: e.clientX,
+                    clientY: e.clientY,
+                    pressure: e.pressure,
+                    tiltX: e.tiltX,
+                    tiltY: e.tiltY,
+                    azimuthAngle: e.azimuthAngle,
+                    altitudeAngle: e.altitudeAngle,
+                    buttons: e.buttons
+                }
+            };
+
+            // Eğer sırada bekleyen bir güncelleme yoksa, yeni karede çalışmak üzere kuyruğa ekle
+            if (!uiGuncellemeBekliyor) {
+                uiGuncellemeBekliyor = true;
+                requestAnimationFrame(arayuzuGuncelle);
+            }
+
         }, { passive: false });
     });
 
